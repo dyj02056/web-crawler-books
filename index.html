@@ -121,6 +121,12 @@
     display: inline-block; margin-top: 10px; background: var(--warn); color: #3a2a06;
     padding: 9px 18px; border-radius: 999px; font-size: 13px; font-weight: 700;
   }
+  .inquire-btn {
+    display: inline-block; margin-top: 12px; background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); padding: 8px 16px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 700; transition: background .15s, color .15s;
+  }
+  .inquire-btn:hover { background: var(--accent); color: var(--accent-ink); }
 
   .safety-box {
     display: flex; gap: 20px; align-items: flex-start; background: var(--card);
@@ -297,6 +303,7 @@
             <blockquote>"경쟁사 사이트 상품이랑 가격을 엑셀로 정리해주실 수 있을까요?"</blockquote>
             <div class="cmd mono">python scraper.py --pages 3</div>
             <div class="result">→ CSV·Excel·JSON·DB 4가지 형식으로 결과물 전달</div>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScIFeIbdXQIaaK0B0d8GshSUyqU327vt4WHPjc47G-veTA6CA/viewform" class="inquire-btn" target="_blank" rel="noopener">이 요청으로 문의하기 →</a>
           </div>
         </div>
 
@@ -309,6 +316,7 @@
             <blockquote>"매주 가격이 바뀌는지 계속 체크하고 싶어요. 특히 이 상품은 꼭 추적하고 싶어요."</blockquote>
             <div class="cmd mono">python scraper.py --history "상품명"</div>
             <div class="result">→ 정기 실행으로 이력이 쌓이고, 변동 시점을 즉시 확인</div>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScIFeIbdXQIaaK0B0d8GshSUyqU327vt4WHPjc47G-veTA6CA/viewform" class="inquire-btn" target="_blank" rel="noopener">이 요청으로 문의하기 →</a>
           </div>
         </div>
 
@@ -321,6 +329,7 @@
             <blockquote>"내일 미팅 전까지 이 사이트 상품 목록이 필요해요. 시간이 없어요."</blockquote>
             <div class="cmd mono">python scraper.py --ai-url "..."</div>
             <div class="result">→ AI가 즉시 추출 (텍스트 정보는 정확, 아이콘형 정보는 제외)</div>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScIFeIbdXQIaaK0B0d8GshSUyqU327vt4WHPjc47G-veTA6CA/viewform" class="inquire-btn" target="_blank" rel="noopener">이 요청으로 문의하기 →</a>
           </div>
         </div>
 
@@ -333,6 +342,7 @@
             <blockquote>"이 사이트도 크롤링해서 매일 모니터링 좀 해주세요."</blockquote>
             <div class="cmd mono">robots.txt 자동 확인 → 금지 시 즉시 중단</div>
             <div class="result">→ 무리하게 진행하지 않고, 가능한 대안을 함께 제안</div>
+            <a href="https://docs.google.com/forms/d/e/1FAIpQLScIFeIbdXQIaaK0B0d8GshSUyqU327vt4WHPjc47G-veTA6CA/viewform" class="inquire-btn" target="_blank" rel="noopener">이 요청으로 문의하기 →</a>
           </div>
         </div>
 
