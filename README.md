@@ -67,6 +67,21 @@ pip install google-genai python-dotenv
 2. Branch를 `main` / 폴더는 `/ (root)`로 두고 **Save**
 3. 1분 후 `https://dyj02056.github.io/web-crawler-books/`에서 확인 가능
 
+### 미리보기
+
+**히어로 화면**
+![소개 페이지 히어로](./screenshots/site-desktop-hero.png)
+
+**전체 페이지** (특징 · 수집 샘플 · 가격 추적 그래프 · 안전장치 안내)
+![소개 페이지 전체](./screenshots/site-desktop-full.png)
+
+**문의하기 섹션** — 5가지 시나리오 카드마다 문의 버튼이 연결되어 있음
+![문의하기 섹션](./screenshots/kmong-desktop-contact.png)
+
+**모바일 화면**
+
+<img src="./screenshots/site-mobile-full.png" alt="모바일 전체 화면" width="320"> <img src="./screenshots/kmong-mobile-contact.png" alt="모바일 문의하기 섹션" width="320">
+
 ## 사용 예시 (실제 의뢰 시나리오)
 
 ### 1. 기본 수집 요청
