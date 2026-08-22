@@ -1,5 +1,5 @@
 __pycache__/
 *.pyc
-output_books.csv
-output_books.xlsx
+output_products.csv
+output_products.xlsx
 .venv/
