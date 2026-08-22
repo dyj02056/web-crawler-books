@@ -27,6 +27,7 @@ def scrape_books(pages: int = 3, delay: float = 0.5) -> list[dict]:
         res = requests.get(url, headers=HEADERS, timeout=10)
         if res.status_code != 200:
             break
+        res.encoding = res.apparent_encoding  # 서버가 인코딩을 명시하지 않아 £ 등 기호가 깨지는 것 방지
         soup = BeautifulSoup(res.text, "html.parser")
         for article in soup.select("article.product_pod"):
             title = article.h3.a["title"]
