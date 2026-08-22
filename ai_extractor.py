@@ -9,12 +9,12 @@
 import json
 import os
 
-import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from http_utils import fetch_with_retry
 from robots_check import is_crawling_allowed
 
 load_dotenv()
@@ -45,7 +45,9 @@ def fetch_page_text(url: str) -> str:
             f"robots.txt에서 이 경로의 크롤링을 금지하고 있어 요청을 중단했습니다: {url}"
         )
 
-    res = requests.get(url, headers=HEADERS, timeout=10)
+    res = fetch_with_retry(url, HEADERS)
+    if res is None:
+        raise RuntimeError(f"재시도했지만 페이지를 가져오지 못했습니다: {url}")
     res.raise_for_status()
     res.encoding = res.apparent_encoding
     soup = BeautifulSoup(res.text, "html.parser")

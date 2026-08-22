@@ -6,25 +6,39 @@ scrapeme.live는 스크래핑 연습을 위해 공개된 샌드박스 쇼핑몰�
 크롤링을 제한하지 않는 걸 직접 확인하고 사용했다. 실제 서비스에 사용할 때는
 클라이언트가 지정하는 사이트의 robots.txt와 이용약관을 반드시 먼저 확인해야
 하며, 이 코드는 요청 전 robots.txt를 자동으로 확인하도록 되어 있다.
+
+크롤링 도중 인터넷이 끊기거나 사이트가 잠깐 응답하지 않아도 데이터가
+통째로 사라지지 않도록, 페이지 단위로 CSV에 바로바로 이어서 저장한다.
 """
 import argparse
 import csv
 import time
 
-import requests
 import xlsxwriter
 from bs4 import BeautifulSoup
 
 from ai_extractor import extract_with_ai
+from http_utils import fetch_with_retry
 from robots_check import is_crawling_allowed
 
 BASE_URL = "https://scrapeme.live/shop/page/{}/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (portfolio-scraper-demo)"}
+FIELDNAMES = ["title", "price_gbp", "page"]
 
 
-def scrape_products(pages: int = 3, delay: float = 0.5) -> list[dict]:
-    """지정한 페이지 수만큼 상품명과 가격을 수집한다."""
-    results = []
+def scrape_products(pages: int = 3, delay: float = 0.5, csv_path: str = "output_products.csv") -> list[dict]:
+    """지정한 페이지 수만큼 상품명과 가격을 수집한다.
+
+    페이지 하나를 처리할 때마다 결과를 csv_path에 바로 이어서 저장한다.
+    중간에 프로그램이 중단되어도 그때까지 모은 데이터는 파일에 안전하게
+    남는다. 실행을 새로 시작할 때는 이전 실행의 결과를 덮어쓰고 시작하므로
+    이전 데이터와 겹쳐 쌓이지 않는다.
+    """
+    # 새 실행 시작 — 이전 파일을 지우고 헤더만 먼저 기록해둔다
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
+        csv.DictWriter(f, fieldnames=FIELDNAMES).writeheader()
+
+    all_rows: list[dict] = []
     for page in range(1, pages + 1):
         url = BASE_URL.format(page)
 
@@ -32,12 +46,15 @@ def scrape_products(pages: int = 3, delay: float = 0.5) -> list[dict]:
             print(f"robots.txt에서 크롤링을 금지한 경로라 중단함: {url}")
             break
 
-        res = requests.get(url, headers=HEADERS, timeout=10)
+        res = fetch_with_retry(url, HEADERS)
+        if res is None:
+            continue  # 이 페이지는 포기하고 다음 페이지로 넘어감
         if res.status_code != 200:
             break
         res.encoding = res.apparent_encoding
 
         soup = BeautifulSoup(res.text, "html.parser")
+        page_rows = []
         for card in soup.select("li.product"):
             title_el = card.select_one(".woocommerce-loop-product__title")
             price_els = card.select(".price .amount")
@@ -45,15 +62,30 @@ def scrape_products(pages: int = 3, delay: float = 0.5) -> list[dict]:
                 continue
             # 할인 중인 상품은 원가/할인가가 같이 나오므로 마지막 값(실제 판매가)을 사용
             price = float(price_els[-1].text.strip().lstrip("£"))
-            results.append(
-                {
-                    "title": title_el.text.strip(),
-                    "price_gbp": price,
-                    "page": page,
-                }
-            )
+            page_rows.append({"title": title_el.text.strip(), "price_gbp": price, "page": page})
+
+        if page_rows:
+            # 이 페이지 결과를 CSV에 즉시 이어쓰기 (중간 저장) — 페이지당 한 번만 기록되므로 중복 없음
+            with open(csv_path, "a", newline="", encoding="utf-8-sig") as f:
+                csv.DictWriter(f, fieldnames=FIELDNAMES).writerows(page_rows)
+
+        all_rows.extend(page_rows)
         time.sleep(delay)  # 서버 부하를 주지 않기 위한 매너 딜레이
-    return results
+
+    return all_rows
+
+
+def read_from_csv(path: str) -> list[dict]:
+    """CSV에 저장된 결과를 다시 읽어온다 (Excel을 CSV 기준으로 재생성할 때 사용)."""
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+    except FileNotFoundError:
+        return []
+    for row in rows:
+        row["price_gbp"] = float(row["price_gbp"])
+        row["page"] = int(row["page"])
+    return rows
 
 
 def save_to_csv(rows: list[dict], path: str) -> None:
@@ -77,7 +109,6 @@ def save_to_excel(rows: list[dict], path: str) -> None:
     money_fmt = workbook.add_format({"num_format": "£0.00"})
     cell_fmt = workbook.add_format({"border": 1})
 
-    headers = ["title", "price_gbp", "page"]
     header_labels = ["상품명", "가격(GBP)", "페이지"]
     for col, label in enumerate(header_labels):
         sheet.write(0, col, label, header_fmt)
@@ -110,14 +141,22 @@ def main():
     if args.ai_url:
         print(f"AI로 상품 정보 추출 시도: {args.ai_url}")
         rows = extract_with_ai(args.ai_url)
-    else:
-        print(f"{args.pages}페이지 수집 시작...")
-        rows = scrape_products(pages=args.pages)
+        print(f"{len(rows)}건 수집 완료")
+        save_to_csv(rows, args.csv)
+        save_to_excel(rows, args.excel)
+        print(f"저장 완료: {args.csv}, {args.excel}")
+        return
+
+    print(f"{args.pages}페이지 수집 시작...")
+    try:
+        rows = scrape_products(pages=args.pages, csv_path=args.csv)
+    finally:
+        # 정상 종료든 중간에 중단되었든, CSV에 안전하게 저장된 내용을
+        # 기준으로 Excel을 (다시) 생성한다.
+        saved_rows = read_from_csv(args.csv)
+        save_to_excel(saved_rows, args.excel)
 
     print(f"{len(rows)}건 수집 완료")
-
-    save_to_csv(rows, args.csv)
-    save_to_excel(rows, args.excel)
     print(f"저장 완료: {args.csv}, {args.excel}")
 
 
