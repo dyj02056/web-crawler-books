@@ -7,6 +7,7 @@ web-crawler-books/
 ├── ai_extractor.py  # 셀렉터 없는 사이트를 Gemini로 대신 추출하는 보조 모듈
 ├── robots_check.py  # 크롤링 전 robots.txt 허용 여부를 확인하는 공용 유틸
 ├── http_utils.py    # 네트워크 요청 재시도(fetch_with_retry) 공용 유틸
+├── sqlite_store.py  # 가격 이력 누적 저장/조회 (save_to_sqlite, get_price_history)
 ├── .env.example     # GOOGLE_API_KEY 설정 예시 (실제 .env는 gitignore 처리)
 ├── README.md        # 프로젝트 요약 (포트폴리오용)
 ├── 설명서.md         # 처음 보는 사람을 위한 상세 설명
@@ -170,6 +171,35 @@ robots.txt를 먼저 확인 → 페이지 텍스트 추출(스크립트/스타�
 em dash/화살표 등 특수 유니코드 기호는 피할 것 (마크다운 문서 안에서
 쓰는 건 문제없음 — 콘솔에 직접 출력될 때만 문제가 됨).
 
+## 출력 포맷 확장 내역 (2026-08-22)
+질문 4번에 대해 JSON + SQLite(가격 이력 누적)를 구현하고, Google Sheets
+자동 업로드는 설정 복잡도(GCP 서비스 계정 생성, 대상 시트에 편집 권한
+공유 필요)를 이유로 보류하기로 결정함(README/설명서에 "요청 시 가능"으로만 언급).
+
+- **JSON**: `save_to_json()` — CSV/Excel과 동일하게 매 실행마다 덮어씀.
+  구조: `list[{"title": str, "price_gbp": float, "page": int}]`
+- **SQLite 가격 이력**: `sqlite_store.py`의 `save_to_sqlite()` /
+  `get_price_history()`. CSV/Excel/JSON과 달리 **덮어쓰지 않고 계속
+  누적**되는 것이 핵심 차별점 — 매 실행마다 `INSERT`만 하고 기존 행을
+  지우지 않음. `collected_at`(UTC ISO 8601)으로 실행 시점을 구분해
+  동일 상품의 시계열 조회(`--history 키워드`)가 가능하도록 설계함
+- **일관성 원칙**: `main()`은 크롤링 경로에서 CSV를 최종 진실
+  공급원(source of truth)으로 삼아, `finally` 블록에서 `read_from_csv()`로
+  다시 읽은 `saved_rows`를 excel/json/sqlite 저장에 공통으로 사용함.
+  AI 추출 경로는 단발성 호출이라 `extract_with_ai()`의 반환값을 그대로
+  네 가지 저장 함수에 전달함
+
+**실제로 발견한 버그**: `--history` 조회 결과를 콘솔에 출력하는
+`print()` 문에 £ 기호(U+00A3)를 그대로 썼는데, 이전에 발견한 em dash
+버그와 같은 원인(Windows cp949 콘솔이 인코딩 못 함)으로
+`UnicodeEncodeError`가 발생함. "GBP 숫자" 형태의 ASCII 표기로 교체해
+해결. **패턴 확인**: 파일에 쓰는 문자열(CSV utf-8-sig, JSON utf-8,
+Excel xlsxwriter)은 인코딩을 직접 지정하므로 £/— 등 특수기호를 써도
+전혀 문제없음 — 오직 `print()`로 콘솔에 직접 출력되는 문자열에서만
+cp949 미지원 문자를 조심하면 됨. 앞으로 이 프로젝트에 `print()` 문을
+추가할 때마다 특수 유니코드 기호(화폐 기호, em dash, 화살표, 이모지 등)
+사용 여부를 확인하는 습관이 필요함.
+
 ## 구현 전 질문 (진행 상황)
 1. ~~**대상 사이트**~~ → ✅ 완료: 연습용 서점 사이트 → 전자제품 쇼핑몰
    → (robots.txt 위반 발견 후) 포켓몬 쇼핑몰(scrapeme.live)로 재교체
@@ -178,6 +208,5 @@ em dash/화살표 등 특수 유니코드 기호는 피할 것 (마크다운 문
 3. **대량 크롤링 대응** — AI 기반 추출(`--ai-url`)을 추가함(셀렉터 없는
    사이트 대응이라는 다른 각도의 확장). 대량 처리 성능 자체에 대한
    Scrapy 전환 여부는 여전히 미정
-4. **출력 포맷 확장** — CSV/Excel 외에 클라이언트가 자주 요구하는
-   형태(Google Sheets 자동 업로드, DB 저장 등)까지 미리 확장 가능하게
-   설계할지, 지금처럼 파일 저장 두 가지로 한정할지 아직 미정
+4. ~~**출력 포맷 확장**~~ → ✅ 완료: JSON + SQLite(가격 이력 누적) 구현.
+   Google Sheets 자동 업로드는 설정 복잡도 문제로 보류 (필요 시 나중에 추가)

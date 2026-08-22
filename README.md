@@ -13,7 +13,8 @@
 - 페이지 단위로 상품명, 가격을 수집
 - **일시적인 네트워크 오류 발생 시 자동 재시도**(최대 3회, 점점 길게 대기)
 - **페이지마다 CSV에 즉시 이어서 저장** — 중간에 프로그램이 중단돼도 그때까지 모은 데이터는 안전하게 남음
-- 수집한 데이터를 서식이 적용된 **Excel 파일**과 **CSV 파일** 두 가지로 동시 저장
+- 수집한 데이터를 **CSV / Excel / JSON** 세 가지 형식으로 동시 저장
+- **SQLite로 가격 이력을 계속 누적** — 실행할 때마다 지우지 않고 쌓여서, 같은 상품의 가격이 시간에 따라 어떻게 바뀌었는지 나중에 조회 가능 (`--history` 옵션)
 - 수집할 페이지 수, 저장 경로를 명령줄 옵션으로 조절 가능
 
 ## 실행 방법
@@ -21,10 +22,17 @@
 pip install requests beautifulsoup4 xlsxwriter
 python scraper.py
 ```
-실행하면 `output_products.csv`, `output_products.xlsx` 두 파일이 생성된다.
-페이지 수를 조절하고 싶으면:
+실행하면 `output_products.csv`, `output_products.xlsx`, `output_products.json`,
+`price_history.db` 네 파일이 생성된다. 페이지 수를 조절하고 싶으면:
 ```bash
 python scraper.py --pages 5
+```
+
+## 가격 변동 이력 조회
+크롤링 결과는 `price_history.db`(SQLite)에 실행할 때마다 계속 누적된다.
+아래처럼 특정 상품의 과거 가격 흐름을 바로 조회할 수 있다.
+```bash
+python scraper.py --history "Bulbasaur"
 ```
 
 ## AI 기반 추출 (셀렉터가 없는 낯선 사이트용)
@@ -57,3 +65,5 @@ pip install google-genai python-dotenv
 - 수집 대상 사이트, 수집 항목, 수집 주기(1회성/정기)에 따라 견적 차등 적용
 - 실제 서비스 적용 시 대상 사이트의 구조에 맞춰 코드를 새로 맞춤 제작
 - 크롤링 시작 전 대상 사이트의 robots.txt를 코드가 자동으로 확인해, 명시적으로 금지된 경로는 수집하지 않음
+- "경쟁사 가격 정기 모니터링/변동 추적" 같은 반복형 서비스로 확장 가능 (SQLite 이력 기능 활용)
+- 요청 시 구글 시트 자동 업로드 연동도 별도 견적으로 가능 (현재는 파일/DB 저장까지 지원)

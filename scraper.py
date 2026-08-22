@@ -12,6 +12,7 @@ scrapeme.live는 스크래핑 연습을 위해 공개된 샌드박스 쇼핑몰�
 """
 import argparse
 import csv
+import json
 import time
 
 import xlsxwriter
@@ -20,6 +21,7 @@ from bs4 import BeautifulSoup
 from ai_extractor import extract_with_ai
 from http_utils import fetch_with_retry
 from robots_check import is_crawling_allowed
+from sqlite_store import get_price_history, save_to_sqlite
 
 BASE_URL = "https://scrapeme.live/shop/page/{}/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (portfolio-scraper-demo)"}
@@ -97,6 +99,14 @@ def save_to_csv(rows: list[dict], path: str) -> None:
         writer.writerows(rows)
 
 
+def save_to_json(rows: list[dict], path: str) -> None:
+    """다른 프로그램에서 바로 가져다 쓰기 편하도록 JSON으로도 저장한다."""
+    if not rows:
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+
+
 def save_to_excel(rows: list[dict], path: str) -> None:
     if not rows:
         return
@@ -130,34 +140,56 @@ def main():
     parser.add_argument("--pages", type=int, default=3, help="수집할 페이지 수 (기본 3)")
     parser.add_argument("--csv", default="output_products.csv", help="CSV 출력 경로")
     parser.add_argument("--excel", default="output_products.xlsx", help="Excel 출력 경로")
+    parser.add_argument("--json", default="output_products.json", help="JSON 출력 경로")
+    parser.add_argument(
+        "--db", default="price_history.db", help="가격 이력을 누적 저장할 SQLite 파일 경로"
+    )
     parser.add_argument(
         "--ai-url",
         default=None,
         help="셀렉터가 준비되지 않은 사이트 URL. 지정하면 페이지 크롤링 대신 "
         "AI(Gemini)가 해당 페이지에서 상품 정보를 대신 추출한다 (GOOGLE_API_KEY 필요)",
     )
+    parser.add_argument(
+        "--history",
+        default=None,
+        help="크롤링 대신, 상품명에 이 키워드가 포함된 과거 가격 이력을 조회해서 보여준다",
+    )
     args = parser.parse_args()
+
+    if args.history:
+        history = get_price_history(args.history, db_path=args.db)
+        if not history:
+            print(f"'{args.history}' 관련 가격 이력이 아직 없습니다.")
+        else:
+            for row in history:
+                print(f"{row['collected_at']} | {row['title']} | GBP {row['price_gbp']}")
+        return
 
     if args.ai_url:
         print(f"AI로 상품 정보 추출 시도: {args.ai_url}")
         rows = extract_with_ai(args.ai_url)
-        print(f"{len(rows)}건 수집 완료")
         save_to_csv(rows, args.csv)
         save_to_excel(rows, args.excel)
-        print(f"저장 완료: {args.csv}, {args.excel}")
+        save_to_json(rows, args.json)
+        save_to_sqlite(rows, args.db)
+        print(f"{len(rows)}건 수집 완료")
+        print(f"저장 완료: {args.csv}, {args.excel}, {args.json}, {args.db}")
         return
 
     print(f"{args.pages}페이지 수집 시작...")
     try:
-        rows = scrape_products(pages=args.pages, csv_path=args.csv)
+        scrape_products(pages=args.pages, csv_path=args.csv)
     finally:
         # 정상 종료든 중간에 중단되었든, CSV에 안전하게 저장된 내용을
-        # 기준으로 Excel을 (다시) 생성한다.
+        # 기준으로 나머지 출력 포맷을 (다시) 생성한다.
         saved_rows = read_from_csv(args.csv)
         save_to_excel(saved_rows, args.excel)
+        save_to_json(saved_rows, args.json)
+        save_to_sqlite(saved_rows, args.db)
 
-    print(f"{len(rows)}건 수집 완료")
-    print(f"저장 완료: {args.csv}, {args.excel}")
+    print(f"{len(saved_rows)}건 수집 완료")
+    print(f"저장 완료: {args.csv}, {args.excel}, {args.json}, {args.db}")
 
 
 if __name__ == "__main__":

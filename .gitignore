@@ -2,5 +2,7 @@ __pycache__/
 *.pyc
 output_products.csv
 output_products.xlsx
+output_products.json
+price_history.db
 .venv/
 .env
