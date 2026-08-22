@@ -13,6 +13,8 @@ import requests
 import xlsxwriter
 from bs4 import BeautifulSoup
 
+from ai_extractor import extract_with_ai
+
 BASE_URL = "https://webscraper.io/test-sites/e-commerce/allinone/{}"
 CATEGORIES = {
     "노트북": "computers/laptops",
@@ -114,11 +116,22 @@ def main():
     )
     parser.add_argument("--csv", default="output_products.csv", help="CSV 출력 경로")
     parser.add_argument("--excel", default="output_products.xlsx", help="Excel 출력 경로")
+    parser.add_argument(
+        "--ai-url",
+        default=None,
+        help="셀렉터가 준비되지 않은 사이트 URL. 지정하면 카테고리 크롤링 대신 "
+        "AI(Gemini)가 해당 페이지에서 상품 정보를 대신 추출한다 (GOOGLE_API_KEY 필요)",
+    )
     args = parser.parse_args()
-    categories = [c.strip() for c in args.categories.split(",") if c.strip()]
 
-    print(f"{len(categories)}개 카테고리 수집 시작: {', '.join(categories)}")
-    rows = scrape_products(categories)
+    if args.ai_url:
+        print(f"AI로 상품 정보 추출 시도: {args.ai_url}")
+        rows = extract_with_ai(args.ai_url)
+    else:
+        categories = [c.strip() for c in args.categories.split(",") if c.strip()]
+        print(f"{len(categories)}개 카테고리 수집 시작: {', '.join(categories)}")
+        rows = scrape_products(categories)
+
     print(f"{len(rows)}건 수집 완료")
 
     save_to_csv(rows, args.csv)

@@ -3,3 +3,4 @@ __pycache__/
 output_products.csv
 output_products.xlsx
 .venv/
+.env

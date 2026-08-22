@@ -23,6 +23,24 @@ python scraper.py
 python scraper.py --categories 노트북,태블릿
 ```
 
+## AI 기반 추출 (셀렉터가 없는 낯선 사이트용)
+미리 셀렉터를 만들어두지 않은 사이트도, `--ai-url`로 AI(Gemini)에게
+페이지를 보여주고 상품 정보를 대신 뽑아달라고 요청할 수 있다.
+
+```bash
+pip install google-genai python-dotenv
+```
+1. [aistudio.google.com](https://aistudio.google.com)에서 구글 계정으로 로그인해 무료 API 키 발급
+2. `.env.example`을 복사해 `.env`로 저장하고 발급받은 키를 `GOOGLE_API_KEY`에 붙여넣기
+3. 실행
+   ```bash
+   python scraper.py --ai-url "https://대상사이트.com/상품목록"
+   ```
+
+⚠️ **한계**: AI 방식은 화면에 "보이는 글자"만 읽기 때문에, 별점처럼
+아이콘·이미지로만 표시된 정보는 못 읽어온다 (숫자/글자로 된 정보만
+정확히 추출됨). 셀렉터가 준비된 사이트는 기존 방식이 더 빠르고 정확하다.
+
 ## 판매 포인트 (견적서에 쓸 문구 예시)
 - "경쟁사 쇼핑몰의 상품/가격/리뷰 정보를 카테고리별로 자동 수집해 엑셀로 정리해 드립니다"
 - 수집 대상 사이트, 수집 항목, 수집 주기(1회성/정기)에 따라 견적 차등 적용
