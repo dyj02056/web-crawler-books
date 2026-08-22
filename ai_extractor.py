@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from robots_check import is_crawling_allowed
+
 load_dotenv()
 
 MODEL = "gemini-3.6-flash"
@@ -25,7 +27,7 @@ PROMPT_TEMPLATE = """다음은 어떤 쇼핑몰 웹페이지에서 뽑아낸 텍
 이 안에서 상품 목록을 찾아 JSON 배열로만 응답하세요. 다른 설명은 넣지 마세요.
 
 각 상품은 아래 형식을 따릅니다.
-{{"title": "상품명", "price": 숫자 또는 null, "rating": 0~5 사이 숫자 또는 null, "review_count": 숫자 또는 null}}
+{{"title": "상품명", "price": 숫자 또는 null}}
 
 상품 정보를 하나도 찾을 수 없으면 빈 배열 []만 응답하세요.
 
@@ -38,6 +40,11 @@ PROMPT_TEMPLATE = """다음은 어떤 쇼핑몰 웹페이지에서 뽑아낸 텍
 
 def fetch_page_text(url: str) -> str:
     """페이지에서 스크립트/스타일 등을 제거한 순수 텍스트만 추출한다."""
+    if not is_crawling_allowed(url, HEADERS["User-Agent"]):
+        raise RuntimeError(
+            f"robots.txt에서 이 경로의 크롤링을 금지하고 있어 요청을 중단했습니다: {url}"
+        )
+
     res = requests.get(url, headers=HEADERS, timeout=10)
     res.raise_for_status()
     res.encoding = res.apparent_encoding
@@ -85,11 +92,9 @@ def extract_with_ai(url: str) -> list[dict]:
             continue
         rows.append(
             {
-                "category": "AI 추출",
                 "title": item["title"],
-                "price_usd": float(item["price"]) if item.get("price") is not None else 0.0,
-                "rating": int(item["rating"]) if item.get("rating") is not None else 0,
-                "review_count": int(item["review_count"]) if item.get("review_count") is not None else 0,
+                "price_gbp": float(item["price"]) if item.get("price") is not None else 0.0,
+                "page": 0,  # AI 추출은 페이지 개념이 없어 0으로 표시
             }
         )
     return rows

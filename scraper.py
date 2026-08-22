@@ -1,68 +1,58 @@
 """
-웹 크롤러 포트폴리오 샘플: webscraper.io의 가상 전자제품 쇼핑몰에서
-카테고리별 상품 정보를 수집해 CSV / Excel 파일로 저장한다.
+웹 크롤러 포트폴리오 샘플: scrapeme.live(스크래핑 연습용으로 공개된
+가상 포켓몬 쇼핑몰)에서 상품명과 가격을 수집해 CSV / Excel 파일로 저장한다.
 
-webscraper.io/test-sites 는 크롤링 연습을 위해 공개된 샌드박스 쇼핑몰이므로
-실제 서비스에 사용할 때는 클라이언트가 지정하는 사이트의 이용약관을
-반드시 먼저 확인해야 한다.
+scrapeme.live는 스크래핑 연습을 위해 공개된 샌드박스 쇼핑몰이며, robots.txt로
+크롤링을 제한하지 않는 걸 직접 확인하고 사용했다. 실제 서비스에 사용할 때는
+클라이언트가 지정하는 사이트의 robots.txt와 이용약관을 반드시 먼저 확인해야
+하며, 이 코드는 요청 전 robots.txt를 자동으로 확인하도록 되어 있다.
 """
 import argparse
 import csv
+import time
 
 import requests
 import xlsxwriter
 from bs4 import BeautifulSoup
 
 from ai_extractor import extract_with_ai
+from robots_check import is_crawling_allowed
 
-BASE_URL = "https://webscraper.io/test-sites/e-commerce/allinone/{}"
-CATEGORIES = {
-    "노트북": "computers/laptops",
-    "태블릿": "computers/tablets",
-    "스마트폰": "phones/touch",
-}
+BASE_URL = "https://scrapeme.live/shop/page/{}/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (portfolio-scraper-demo)"}
 
 
-def scrape_products(categories: list[str] | None = None) -> list[dict]:
-    """지정한 카테고리(기본: 전체)의 상품 정보를 수집한다.
-
-    이 쇼핑몰은 카테고리 페이지 하나에 상품이 전부 나와 있어 페이지를
-    넘기지 않아도 된다(카테고리당 요청 1회).
-    """
-    targets = categories or list(CATEGORIES.keys())
+def scrape_products(pages: int = 3, delay: float = 0.5) -> list[dict]:
+    """지정한 페이지 수만큼 상품명과 가격을 수집한다."""
     results = []
-    for name in targets:
-        path = CATEGORIES.get(name)
-        if not path:
-            print(f"알 수 없는 카테고리라 건너뜀: {name}")
-            continue
+    for page in range(1, pages + 1):
+        url = BASE_URL.format(page)
 
-        url = BASE_URL.format(path)
+        if not is_crawling_allowed(url, HEADERS["User-Agent"]):
+            print(f"robots.txt에서 크롤링을 금지한 경로라 중단함: {url}")
+            break
+
         res = requests.get(url, headers=HEADERS, timeout=10)
         if res.status_code != 200:
-            print(f"{name} 카테고리 요청 실패 (status {res.status_code})")
-            continue
+            break
         res.encoding = res.apparent_encoding
 
         soup = BeautifulSoup(res.text, "html.parser")
-        for card in soup.select(".thumbnail"):
-            title = card.select_one("a.title")["title"]
-            price_text = card.select_one(".price [itemprop='price']").text.strip()
-            price = float(price_text.lstrip("$"))
-            rating_el = card.select_one("[data-rating]")
-            rating = int(rating_el["data-rating"]) if rating_el else 0
-            review_el = card.select_one("[itemprop='reviewCount']")
-            review_count = int(review_el.text.strip()) if review_el else 0
+        for card in soup.select("li.product"):
+            title_el = card.select_one(".woocommerce-loop-product__title")
+            price_els = card.select(".price .amount")
+            if not title_el or not price_els:
+                continue
+            # 할인 중인 상품은 원가/할인가가 같이 나오므로 마지막 값(실제 판매가)을 사용
+            price = float(price_els[-1].text.strip().lstrip("£"))
             results.append(
                 {
-                    "category": name,
-                    "title": title,
-                    "price_usd": price,
-                    "rating": rating,
-                    "review_count": review_count,
+                    "title": title_el.text.strip(),
+                    "price_gbp": price,
+                    "page": page,
                 }
             )
+        time.sleep(delay)  # 서버 부하를 주지 않기 위한 매너 딜레이
     return results
 
 
@@ -84,42 +74,35 @@ def save_to_excel(rows: list[dict], path: str) -> None:
     header_fmt = workbook.add_format(
         {"bold": True, "bg_color": "#2b2420", "font_color": "#ffffff", "border": 1}
     )
-    money_fmt = workbook.add_format({"num_format": "$0.00"})
+    money_fmt = workbook.add_format({"num_format": "£0.00"})
     cell_fmt = workbook.add_format({"border": 1})
 
-    header_labels = ["카테고리", "상품명", "가격(USD)", "평점", "리뷰 수"]
+    headers = ["title", "price_gbp", "page"]
+    header_labels = ["상품명", "가격(GBP)", "페이지"]
     for col, label in enumerate(header_labels):
         sheet.write(0, col, label, header_fmt)
 
     for row_idx, row in enumerate(rows, start=1):
-        sheet.write(row_idx, 0, row["category"], cell_fmt)
-        sheet.write(row_idx, 1, row["title"], cell_fmt)
-        sheet.write_number(row_idx, 2, row["price_usd"], money_fmt)
-        sheet.write_number(row_idx, 3, row["rating"], cell_fmt)
-        sheet.write_number(row_idx, 4, row["review_count"], cell_fmt)
+        sheet.write(row_idx, 0, row["title"], cell_fmt)
+        sheet.write_number(row_idx, 1, row["price_gbp"], money_fmt)
+        sheet.write_number(row_idx, 2, row["page"], cell_fmt)
 
-    sheet.set_column("A:A", 12)
-    sheet.set_column("B:B", 45)
-    sheet.set_column("C:C", 12)
-    sheet.set_column("D:D", 8)
-    sheet.set_column("E:E", 10)
+    sheet.set_column("A:A", 30)
+    sheet.set_column("B:B", 12)
+    sheet.set_column("C:C", 8)
     sheet.freeze_panes(1, 0)
     workbook.close()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="가상 쇼핑몰(전자제품) 상품 정보 크롤러")
-    parser.add_argument(
-        "--categories",
-        default=",".join(CATEGORIES.keys()),
-        help=f"수집할 카테고리, 쉼표로 구분 (기본: 전체 — {', '.join(CATEGORIES.keys())})",
-    )
+    parser = argparse.ArgumentParser(description="scrapeme.live 상품 정보 크롤러")
+    parser.add_argument("--pages", type=int, default=3, help="수집할 페이지 수 (기본 3)")
     parser.add_argument("--csv", default="output_products.csv", help="CSV 출력 경로")
     parser.add_argument("--excel", default="output_products.xlsx", help="Excel 출력 경로")
     parser.add_argument(
         "--ai-url",
         default=None,
-        help="셀렉터가 준비되지 않은 사이트 URL. 지정하면 카테고리 크롤링 대신 "
+        help="셀렉터가 준비되지 않은 사이트 URL. 지정하면 페이지 크롤링 대신 "
         "AI(Gemini)가 해당 페이지에서 상품 정보를 대신 추출한다 (GOOGLE_API_KEY 필요)",
     )
     args = parser.parse_args()
@@ -128,9 +111,8 @@ def main():
         print(f"AI로 상품 정보 추출 시도: {args.ai_url}")
         rows = extract_with_ai(args.ai_url)
     else:
-        categories = [c.strip() for c in args.categories.split(",") if c.strip()]
-        print(f"{len(categories)}개 카테고리 수집 시작: {', '.join(categories)}")
-        rows = scrape_products(categories)
+        print(f"{args.pages}페이지 수집 시작...")
+        rows = scrape_products(pages=args.pages)
 
     print(f"{len(rows)}건 수집 완료")
 
